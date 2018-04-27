@@ -32,6 +32,7 @@ public class ExecutionManagerTest {
         }
         ExecutionManagerImpl executionManager = new ExecutionManagerImpl();
         Context context = executionManager.execute(callback, list);
+        assertEquals(false, callbackCheck.get());
         while (!context.isFinished()) {
             Thread.sleep(10);
         }
@@ -61,6 +62,8 @@ public class ExecutionManagerTest {
         ExecutionManagerImpl executionManager = new ExecutionManagerImpl();
         Context context = executionManager.execute(callback, list);
         Thread.sleep(10);
+        assertEquals(false, callbackCheck.get());
+        assertEquals(0, context.getInterruptedTaskCount());
         context.interrupt();
         while (!context.isFinished()) {
         }
