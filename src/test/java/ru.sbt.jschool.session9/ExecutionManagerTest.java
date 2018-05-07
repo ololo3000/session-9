@@ -34,7 +34,6 @@ public class ExecutionManagerTest {
         Context context = executionManager.execute(callback, list);
         assertEquals(false, callbackCheck.get());
         while (!context.isFinished()) {
-            Thread.sleep(10);
         }
         assertEquals(RUNNABLE_CNT, inc.get());
         assertEquals(RUNNABLE_CNT,context.getCompletedTaskCount());
@@ -45,7 +44,7 @@ public class ExecutionManagerTest {
 
     @Test
     public void testInterrupt() throws Exception {
-        final int RUNNABLE_CNT = 10_000;
+        final int RUNNABLE_CNT = 100_000;
         Runnable[] list = new Runnable[RUNNABLE_CNT];
         AtomicInteger inc = new AtomicInteger();
         AtomicBoolean callbackCheck = new AtomicBoolean();

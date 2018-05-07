@@ -1,34 +1,38 @@
 package ru.sbt.jschool.session9;
 
 import java.util.ArrayList;
-import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class TaskProcessor implements Runnable {
-    private final List<Task> taskList = new ArrayList<>();
+    private static final int MAX_THREAD_CNT = 3;
+
     private final Context context = this.new ContextImpl();
     private final AtomicInteger failedTaskCtr = new AtomicInteger();
     private final AtomicInteger endedTaskCtr = new AtomicInteger();
+    private final AtomicInteger execTaskCtr = new AtomicInteger();
     private final AtomicBoolean isInterrupted = new AtomicBoolean();
     private final AtomicBoolean isFinished = new AtomicBoolean();
-    private int interruptedTaskCtr = 0;
-
+    private final ExecutorService executor = Executors.newFixedThreadPool(MAX_THREAD_CNT);
     private final Runnable callback;
-    private int taskToProcessCtr;
+    private final ArrayList<Task> taskList;
+    private final AtomicInteger taskCtr;
+
+    private int interruptedTaskCtr;
 
     public TaskProcessor(Runnable callback, Runnable... tasks) {
         this.callback = callback;
-        taskToProcessCtr = tasks.length;
+        taskCtr = new AtomicInteger(tasks.length);
+        taskList = new ArrayList<>(tasks.length);
 
         for (Runnable job : tasks) {
             Task task = new Task(job);
 
             task.addTaskEndedHandler(() -> {
-                endedTaskCtr.incrementAndGet();
-                if (endedTaskCtr.get() == taskToProcessCtr) {
-                    callback.run();
-                    isFinished.compareAndSet(false, true);
+                if (endedTaskCtr.incrementAndGet() == taskCtr.get()) {
+                    handleCompletedEvent();
                 }
             });
 
@@ -38,6 +42,13 @@ public class TaskProcessor implements Runnable {
 
             taskList.add(task);
         }
+    }
+
+    private void handleCompletedEvent() {
+        executor.submit(() -> {
+            callback.run();
+            isFinished.compareAndSet(false, true);
+        });
     }
 
     private class ContextImpl implements Context {
@@ -59,6 +70,8 @@ public class TaskProcessor implements Runnable {
         @Override
         public void interrupt() {
             isInterrupted.compareAndSet(false, true);
+            interruptedTaskCtr = taskList.size() - execTaskCtr.get();
+            taskCtr.getAndAdd(-interruptedTaskCtr);
         }
 
         @Override
@@ -71,17 +84,20 @@ public class TaskProcessor implements Runnable {
         return context;
     }
 
+
     @Override
     public void run() {
-        for (int i = 0; i < taskList.size(); i++) {
+        if (taskCtr.get() == 0) {
+            handleCompletedEvent();
+            return;
+        }
+
+        for (Task task : taskList) {
+            execTaskCtr.incrementAndGet();
+            executor.submit(task);
             if (isInterrupted.get()) {
-                interruptedTaskCtr = taskList.size() - i;
-                taskToProcessCtr = i;
                 break;
             }
-
-            Thread thread = new Thread(taskList.get(i));
-            thread.start();
         }
     }
 }
