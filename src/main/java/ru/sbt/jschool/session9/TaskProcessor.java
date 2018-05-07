@@ -13,14 +13,15 @@ public class TaskProcessor implements Runnable {
     private final AtomicInteger failedTaskCtr = new AtomicInteger();
     private final AtomicInteger endedTaskCtr = new AtomicInteger();
     private final AtomicInteger execTaskCtr = new AtomicInteger();
+    private final AtomicInteger interruptedTaskCtr = new AtomicInteger();
     private final AtomicBoolean isInterrupted = new AtomicBoolean();
     private final AtomicBoolean isFinished = new AtomicBoolean();
     private final ExecutorService executor = Executors.newFixedThreadPool(MAX_THREAD_CNT);
+
     private final Runnable callback;
     private final ArrayList<Task> taskList;
     private final AtomicInteger taskCtr;
 
-    private int interruptedTaskCtr;
 
     public TaskProcessor(Runnable callback, Runnable... tasks) {
         this.callback = callback;
@@ -32,7 +33,7 @@ public class TaskProcessor implements Runnable {
 
             task.addTaskEndedHandler(() -> {
                 if (endedTaskCtr.incrementAndGet() == taskCtr.get()) {
-                    handleCompletedEvent();
+                    handleFinishEvent();
                 }
             });
 
@@ -44,7 +45,7 @@ public class TaskProcessor implements Runnable {
         }
     }
 
-    private void handleCompletedEvent() {
+    private void handleFinishEvent() {
         executor.submit(() -> {
             callback.run();
             isFinished.compareAndSet(false, true);
@@ -64,14 +65,14 @@ public class TaskProcessor implements Runnable {
 
         @Override
         public int getInterruptedTaskCount() {
-            return interruptedTaskCtr;
+            return interruptedTaskCtr.get();
         }
 
         @Override
         public void interrupt() {
             isInterrupted.compareAndSet(false, true);
-            interruptedTaskCtr = taskList.size() - execTaskCtr.get();
-            taskCtr.getAndAdd(-interruptedTaskCtr);
+            interruptedTaskCtr.set(taskCtr.get() - execTaskCtr.get());
+            taskCtr.getAndAdd(-interruptedTaskCtr.get());
         }
 
         @Override
@@ -88,7 +89,7 @@ public class TaskProcessor implements Runnable {
     @Override
     public void run() {
         if (taskCtr.get() == 0) {
-            handleCompletedEvent();
+            handleFinishEvent();
             return;
         }
 
